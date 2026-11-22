@@ -163,6 +163,8 @@ public sealed class Hub
         Db.Set("server.id", ServerId);
         Port = int.TryParse(Environment.GetEnvironmentVariable("DJFLIX_PORT") ?? Db.Get("server.port"), out var p) ? p : 8674;
         Catalog = new Catalog(this);
+        // Lets the desktop app find the hub without knowing the configured port.
+        try { File.WriteAllText(System.IO.Path.Combine(dataDir, "hub.json"), J.Ser(new { port = Port, pid = Environment.ProcessId, version = Version })); } catch { }
     }
 
     void ApplyPendingRestore()

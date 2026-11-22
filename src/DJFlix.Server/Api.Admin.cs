@@ -8,6 +8,7 @@ public static partial class Api
     static readonly string[] PlainSettings = ["server.name", "server.port", "tmdb.language", "cache.metadataDays", "scan.intervalMinutes", "playback.completeThreshold", "debrid.proxy", "ui.theme", "startup.launchAtLogin"];
 
     static string FirewallCommand(int port) =>
+        "netsh advfirewall firewall delete rule name=\"DJFlix\" >nul & netsh advfirewall firewall delete rule name=\"DJFlix Discovery\" >nul & " +
         $"netsh advfirewall firewall add rule name=\"DJFlix\" dir=in action=allow protocol=TCP localport={port} profile=private,domain remoteip=localsubnet & " +
         $"netsh advfirewall firewall add rule name=\"DJFlix Discovery\" dir=in action=allow protocol=UDP localport={Hub.DiscoveryPort} profile=private,domain remoteip=localsubnet";
 

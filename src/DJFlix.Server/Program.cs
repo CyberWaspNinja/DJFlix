@@ -5,6 +5,10 @@ using System.Text;
 using System.Threading.RateLimiting;
 using DJFlix;
 
+// "--install" / "--uninstall" register the Windows service and firewall rules; the setup program calls them elevated.
+if (args.Contains("--install")) return ServiceSetup.Install();
+if (args.Contains("--uninstall")) return ServiceSetup.Uninstall();
+
 var dataDir = Environment.GetEnvironmentVariable("DJFLIX_DATA")
     ?? (args.SkipWhile(a => a != "--data").Skip(1).FirstOrDefault())
     ?? (OperatingSystem.IsWindows() ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DJFlix")
@@ -109,10 +113,15 @@ while (true)
     finally { await app.DisposeAsync(); hub.Db.Dispose(); }
 
     if (!hub.RestartRequested) break;
-    // Under the Windows service manager a clean in-process restart is not possible: exit non-zero and
-    // let the service recovery policy (configured by the installer) start it again.
-    if (OperatingSystem.IsWindows() && !Environment.UserInteractive) Environment.Exit(1);
+    // As a Windows service the host cannot be rebuilt in-process: the service has just reported "stopped",
+    // so hand over to a detached helper that starts it again once the stop has completed.
+    if (ServiceSetup.RunningAsService)
+    {
+        ServiceSetup.StartAgainLater();
+        break;
+    }
 }
+return 0;
 
 static string ClientIp(HttpContext ctx)
 {
@@ -147,5 +156,80 @@ public sealed class DiscoveryResponder(Hub hub) : BackgroundService
                 catch (OperationCanceledException) { break; }
                 catch (SocketException) { }
             }
+    }
+}
+
+/// <summary>Registers DJFlix as a Windows service with a LAN-only firewall rule. Run elevated by the setup program.</summary>
+public static class ServiceSetup
+{
+    const string Name = "DJFlix";
+
+    public static bool RunningAsService =>
+#if WINDOWS_SERVICE
+        Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService();
+#else
+        false;
+#endif
+
+    static int Run(string file, params string[] args)
+    {
+        var psi = new ProcessStartInfo(file) { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        using var p = Process.Start(psi)!;
+        var output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd(); p.WaitForExit(30000);
+        Console.WriteLine($"{Path.GetFileName(file)} {string.Join(' ', args)} -> {p.ExitCode} {output.Trim()}");
+        return p.ExitCode;
+    }
+
+    public static int Install()
+    {
+        if (!OperatingSystem.IsWindows()) { Console.WriteLine("Service installation is only available on Windows."); return 1; }
+        var exe = Environment.ProcessPath!;
+        Run("sc.exe", "stop", Name); Run("sc.exe", "delete", Name);
+        for (int i = 0; i < 20 && Run("sc.exe", "query", Name) == 0; i++) Thread.Sleep(500);   // wait for the old registration to go
+        var rc = Run("sc.exe", "create", Name, "binPath=", $"\"{exe}\"", "start=", "auto", "DisplayName=", "DJFlix Media Hub");
+        if (rc != 0) return rc;
+        Run("sc.exe", "description", Name, "Serves your DJFlix library, profiles and watch progress to this PC and to paired Fire TV devices on the home network.");
+        Run("sc.exe", "failure", Name, "reset=", "86400", "actions=", "restart/5000/restart/5000/restart/30000");
+        // Signed-in users may start and stop the service from the DJFlix dashboard without elevation.
+        Run("sc.exe", "sdset", Name, "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWRPWPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)");
+        Firewall(false); Firewall(true);
+        return Run("sc.exe", "start", Name);
+    }
+
+    public static int Uninstall()
+    {
+        if (!OperatingSystem.IsWindows()) return 1;
+        Run("sc.exe", "stop", Name);
+        for (int i = 0; i < 20 && Process.GetProcessesByName("DJFlix.Server").Length > 1; i++) Thread.Sleep(500);
+        Run("sc.exe", "delete", Name);
+        Firewall(false);
+        return 0;
+    }
+
+    /// <summary>TCP for the API and UDP for discovery, private/domain profiles, local subnet only.</summary>
+    static void Firewall(bool add)
+    {
+        int port = 8674;
+        try
+        {
+            var info = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DJFlix", "hub.json");
+            if (File.Exists(info) && System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(info))?["port"]?.GetValue<int>() is { } p) port = p;
+        }
+        catch { }
+        if (!add)
+        {
+            Run("netsh.exe", "advfirewall", "firewall", "delete", "rule", "name=DJFlix");
+            Run("netsh.exe", "advfirewall", "firewall", "delete", "rule", "name=DJFlix Discovery");
+            return;
+        }
+        Run("netsh.exe", "advfirewall", "firewall", "add", "rule", "name=DJFlix", "dir=in", "action=allow", "protocol=TCP", $"localport={port}", "profile=private,domain", "remoteip=localsubnet");
+        Run("netsh.exe", "advfirewall", "firewall", "add", "rule", "name=DJFlix Discovery", "dir=in", "action=allow", "protocol=UDP", $"localport={Hub.DiscoveryPort}", "profile=private,domain", "remoteip=localsubnet");
+    }
+
+    public static void StartAgainLater()
+    {
+        try { Process.Start(new ProcessStartInfo("cmd.exe", "/c for /l %i in (1,1,15) do (ping -n 2 127.0.0.1 >nul & sc start DJFlix >nul && exit)") { CreateNoWindow = true, UseShellExecute = false }); }
+        catch { }
     }
 }

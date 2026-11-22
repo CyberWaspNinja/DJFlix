@@ -1,0 +1,59 @@
+name: windows
+on:
+  push:
+    paths: ['src/**', 'installer/**', 'tests/windows_smoke.ps1', 'tests/installer_smoke.ps1', 'tests/fake_upstream.py', '.github/workflows/windows.yml']
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Publish hub service (self-contained)
+        run: dotnet publish src/DJFlix.Server -c Release -r win-x64 --self-contained true -o publish/app/server
+      - name: Publish desktop app (self-contained, unpackaged)
+        run: dotnet publish src/DJFlix.Desktop -c Release -r win-x64 -p:Platform=x64 -o publish/app
+      - name: Desktop smoke test with screenshots
+        shell: pwsh
+        run: |
+          pip install -q pillow imageio-ffmpeg
+          ./tests/windows_smoke.ps1 "$PWD\publish\app"
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc installer\djflix.iss
+      - name: Installer smoke test (service, firewall, restart, uninstall)
+        shell: pwsh
+        run: ./tests/installer_smoke.ps1 "$PWD\dist\DJFlix-Setup.exe"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: DJFlix-Windows
+          path: |
+            dist/DJFlix-Setup.exe
+            shots-win
+      - name: Publish screenshots to the ci-screenshots-windows branch
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p /tmp/pub && cp -r shots-win /tmp/pub/ 2>/dev/null || true
+          cd /tmp/pub && git init -q -b ci-screenshots-windows && git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Windows smoke screenshots for ${GITHUB_SHA}" || exit 0
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-screenshots-windows
+      - name: Publish latest installer as a release
+        if: github.ref == 'refs/heads/main' && success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete windows-latest --cleanup-tag -y || true
+          gh release create windows-latest dist/DJFlix-Setup.exe --prerelease --target "$GITHUB_SHA" --title "DJFlix for Windows (latest build)" --notes "Built from $GITHUB_SHA. Installs the desktop app and the DJFlix service."
