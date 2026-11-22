@@ -199,7 +199,8 @@ fun PlayerScreen(app: AppState, first: Screen.Player) {
     }
     LaunchedEffect(panel, error, countdown) { delay(80); runCatching { if (panel != null || error != null || countdown >= 0) panelFocus.requestFocus() else keyFocus.requestFocus() } }
 
-    BackHandler { when { countdown >= 0 -> { countdown = -1; exit() }; panel != null && panel != "menu" && panel != "next" -> panel = "menu"; panel != null -> panel = null; else -> exit() } }
+    fun onBack() { when { countdown >= 0 -> { countdown = -1; exit() }; error != null -> { app.dataVersion++; app.back() }; panel != null && panel != "menu" && panel != "next" -> panel = "menu"; panel != null -> panel = null; else -> exit() } }
+    BackHandler { onBack() }
 
     fun seekBy(delta: Long) { val target = (player.currentPosition + delta).coerceIn(0, if (player.duration > 0) player.duration else Long.MAX_VALUE); player.seekTo(target); pos = target; poke(); flash(if (delta > 0) "+${delta / 1000}s" else "${delta / 1000}s") }
     fun toggle() { if (player.isPlaying) { player.pause(); flash("Paused") } else { player.play(); flash("Play") }; poke() }
@@ -212,6 +213,8 @@ fun PlayerScreen(app: AppState, first: Screen.Player) {
     Box(
         // onKeyEvent sits before the focus target so it receives the keys of this node and of the panels inside it.
         Modifier.fillMaxSize().background(Color.Black).onKeyEvent { ev ->
+            // Back is taken here: otherwise Compose first spends a Back press moving focus out of the open panel.
+            if (ev.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BACK) { if (ev.nativeKeyEvent.action == KeyEvent.ACTION_UP) onBack(); return@onKeyEvent true }
             if (ev.nativeKeyEvent.action != KeyEvent.ACTION_DOWN || panel != null || error != null || countdown >= 0) return@onKeyEvent false
             when (ev.nativeKeyEvent.keyCode) {
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { toggle(); true }

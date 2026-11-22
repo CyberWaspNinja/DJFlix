@@ -64,7 +64,7 @@ while (true)
         }
         var path = ctx.Request.Path.Value ?? "";
         if (path.StartsWith("/api/") && !path.StartsWith("/api/v1/images") && !path.EndsWith("/progress") && !path.StartsWith("/api/v1/admin/logs") && !path.StartsWith("/api/v1/admin/status"))
-            hub.Log(ctx.Response.StatusCode >= 500 ? "error" : ctx.Response.StatusCode >= 400 ? "warn" : "api", $"{ctx.Request.Method} {Redact(ctx.Request.Path)} → {ctx.Response.StatusCode} ({sw.ElapsedMilliseconds} ms) {ctx.Connection.RemoteIpAddress?.MapToIPv4()}");
+            hub.Log(ctx.Response.StatusCode >= 500 ? "error" : ctx.Response.StatusCode >= 400 ? "warn" : "api", $"{ctx.Request.Method} {Redact(ctx.Request.Path)} → {ctx.Response.StatusCode} ({sw.ElapsedMilliseconds} ms) {ClientIp(ctx)}");
     });
 
     app.UseRateLimiter();
@@ -94,7 +94,7 @@ while (true)
         if (dev == null || dev.B("is_revoked")) { await Deny(401, "device_revoked", "This device is no longer paired. Pair it again from the setup wizard."); return; }
         var id = dev.S("id"); ctx.Items["deviceId"] = id;
         var now = Db.Now();
-        if (now - lastSeen.GetValueOrDefault(id) > 15_000) { lastSeen[id] = now; hub.Db.Exec("UPDATE devices SET last_seen=?, last_ip=? WHERE id=?", now, ctx.Connection.RemoteIpAddress?.MapToIPv4().ToString(), id); }
+        if (now - lastSeen.GetValueOrDefault(id) > 15_000) { lastSeen[id] = now; hub.Db.Exec("UPDATE devices SET last_seen=?, last_ip=? WHERE id=?", now, ClientIp(ctx), id); }
         await next();
     });
 
@@ -112,6 +112,12 @@ while (true)
     // Under the Windows service manager a clean in-process restart is not possible: exit non-zero and
     // let the service recovery policy (configured by the installer) start it again.
     if (OperatingSystem.IsWindows() && !Environment.UserInteractive) Environment.Exit(1);
+}
+
+static string ClientIp(HttpContext ctx)
+{
+    var ip = ctx.Connection.RemoteIpAddress;
+    return ip == null ? "?" : ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4().ToString() : ip.ToString();
 }
 
 static string Redact(PathString p)

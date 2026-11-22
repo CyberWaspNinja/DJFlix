@@ -46,8 +46,14 @@ key BACK; sleep 3
 key DPAD_UP DPAD_LEFT DPAD_LEFT DPAD_LEFT DPAD_LEFT DPAD_LEFT DPAD_CENTER; shot 10-search 3
 key DPAD_DOWN DPAD_CENTER; shot 11-search-results 4
 key DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_CENTER; shot 12-movies 5
-key DPAD_RIGHT DPAD_RIGHT DPAD_CENTER; shot 13-shows 5
-key DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_CENTER; shot 14-settings 4
+key DPAD_RIGHT DPAD_CENTER; shot 13-shows 5
+key DPAD_DOWN DPAD_DOWN DPAD_DOWN DPAD_CENTER; shot 14-show-details 6
+key DPAD_DOWN DPAD_DOWN; shot 15-episodes 3
+key DPAD_CENTER; shot 16-episode-playing 12
+key BACK; sleep 3; key BACK; sleep 3
+key DPAD_UP DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_CENTER; shot 17-settings 4
+key DPAD_DOWN DPAD_CENTER; shot 18-settings-changed 3
+api GET /profiles | python3 -c 'import sys,json;print("prefs now:",json.load(sys.stdin)[0]["prefs"])'
 
 adb logcat -d > logcat.txt
 if grep -A25 "FATAL EXCEPTION" logcat.txt | grep -q "com.djflix.tv"; then fail "app crashed"; grep -A30 "FATAL EXCEPTION" logcat.txt | head -60; fi
