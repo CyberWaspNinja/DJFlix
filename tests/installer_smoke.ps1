@@ -28,4 +28,4 @@ Start-Process $un.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/N
 Start-Sleep 3
 if (Get-Service DJFlix -ErrorAction SilentlyContinue) { Fail 'service still registered after uninstall' } else { Write-Host 'uninstall removed the service' }
 if ((netsh advfirewall firewall show rule name=DJFlix | Out-String) -match 'LocalSubnet') { Fail 'firewall rule left behind' }
-if ($failed) { Get-Content install.log -Tail 40 -ErrorAction SilentlyContinue; exit 1 } else { Write-Host 'INSTALLER OK' }
+if ($failed) { Get-Content install.log -Tail 40 -ErrorAction SilentlyContinue; exit 1 } else { Write-Host 'INSTALLER OK'; exit 0 }

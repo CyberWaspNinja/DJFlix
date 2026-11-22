@@ -61,4 +61,4 @@ Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 2; StartTime =
 if (-not $appProc.HasExited) { Stop-Process -Id $appProc.Id -Force }
 Stop-Process -Id $hub.Id, $up.Id -Force -ErrorAction SilentlyContinue
 Remove-Item Env:DJFLIX_DATA, Env:DJFLIX_PORT, Env:DJFLIX_AUTOPILOT
-if ($failed) { Write-Host 'SMOKE FAILED'; exit 1 } else { Write-Host 'SMOKE OK' }
+if ($failed) { Write-Host 'SMOKE FAILED'; exit 1 } else { Write-Host 'SMOKE OK'; exit 0 }
