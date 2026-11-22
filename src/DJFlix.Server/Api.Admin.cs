@@ -294,7 +294,13 @@ public static partial class Api
         a.MapGet("/backup", (Hub hub) =>
         {
             // Fold the write-ahead log into the main file so a plain copy is a complete backup.
-            var bytes = hub.Db.Locked(() => { hub.Db.Query("PRAGMA wal_checkpoint(TRUNCATE)"); return File.ReadAllBytes(hub.Db.Path); });
+            var bytes = hub.Db.Locked(() =>
+            {
+                hub.Db.Query("PRAGMA wal_checkpoint(TRUNCATE)");
+                // SQLite keeps the file open for writing; Windows needs a matching share mode to read it.
+                using var fs = new FileStream(hub.Db.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var ms = new MemoryStream(); fs.CopyTo(ms); return ms.ToArray();
+            });
             return Results.File(bytes, "application/octet-stream", $"djflix-backup-{DateTime.UtcNow:yyyyMMdd-HHmm}.djbak");
         });
         a.MapPost("/restore", async (Hub hub, HttpContext c) =>
