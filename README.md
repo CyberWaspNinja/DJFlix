@@ -6,8 +6,8 @@ Personal media ecosystem: a Windows hub (service + desktop app) and a Fire TV cl
 
 | Component | State |
 |---|---|
-| `src/DJFlix.Server` — hub service, REST API v1, SQLite, pairing, sync, TMDB + Real-Debrid connectors, library scanner | Built and tested (103 end-to-end checks, `tests/e2e.py`) on Linux |
-| Windows-only paths in the server (DPAPI key wrapping, `winsqlite3.dll`, Windows Service hosting, firewall rule) | Written, not yet run on Windows |
+| `src/DJFlix.Server` — hub service, REST API v1, SQLite, pairing, sync, TMDB + Real-Debrid connectors, library scanner | Built and tested in CI on Windows and Linux (103 end-to-end checks, `tests/e2e.py`) |
+| Windows Service hosting and firewall rule | Compiles on Windows; not yet exercised (needs the installer) |
 | WinUI 3 desktop app, installer | Not started |
 | Fire TV app (Kotlin, Media3) | Not started |
 
