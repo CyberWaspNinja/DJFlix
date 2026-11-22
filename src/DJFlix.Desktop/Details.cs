@@ -25,8 +25,8 @@ public sealed class DetailsPage(long id) : PageBase
 
         var playLabel = show && upNext != null ? $"{(upNext.O("progress").L("positionMs") > 0 ? "▶  Resume" : "▶  Play")}  S{upNext.L("season")} E{upNext.L("episode")}"
             : inProgress ? $"▶  Resume from {Ui.Time(prog.L("positionMs"))}" : "▶  Play";
-        var actions = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal };
-        void Act(UIElement? e) { if (e is FrameworkElement f) { f.Margin = new Thickness(0, 0, 8, 8); actions.Children.Add(f); } }
+        var actions = new WrapPanel { Gap = 8 };
+        void Act(UIElement? e) { if (e != null) actions.Children.Add(e); }
         if (available) Act(Ui.Btn(playLabel, () => G.Window.Play(id, show ? upNext?.L("episodeId") : null), true));
         if (available && !show && inProgress) Act(Ui.Btn("Play from beginning", () => G.Window.Play(id, null, true)));
         if (d.O("trailer") != null) Act(Ui.Btn("Watch trailer", () => Ui.OpenTrailer(d.O("trailer"))));

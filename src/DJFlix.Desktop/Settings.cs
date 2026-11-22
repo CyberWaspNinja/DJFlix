@@ -28,15 +28,15 @@ public sealed class SettingsPage : PageBase
         // ---- playback -------------------------------------------------------------------------
         col.Children.Add(Ui.H2("Playback"));
         var speeds = new[] { 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4 }.Select(s => (s.ToString(System.Globalization.CultureInfo.InvariantCulture), s + "x"));
-        col.Children.Add(Ui.Row(12,
+        col.Children.Add(Ui.Wrap(12,
             Ui.Combo(speeds, G.PrefNum("playbackSpeed", 1).ToString(System.Globalization.CultureInfo.InvariantCulture), v => Pref(new { playbackSpeed = double.Parse(v, System.Globalization.CultureInfo.InvariantCulture) }), "Default speed"),
             Ui.Combo([("5", "5 seconds"), ("10", "10 seconds"), ("15", "15 seconds"), ("30", "30 seconds"), ("60", "60 seconds")], ((int)G.PrefNum("seekSeconds", 10)).ToString(), v => Pref(new { seekSeconds = int.Parse(v) }), "Skip interval"),
             Ui.Combo([("resume", "Resume where I stopped"), ("restart", "Start from the beginning")], G.PrefStr("resumeBehaviour", "resume"), v => Pref(new { resumeBehaviour = v }), "When a title has progress", 240)));
-        col.Children.Add(Ui.Row(24,
+        col.Children.Add(Ui.Wrap(24,
             Toggle("Autoplay", G.PrefBool("autoplay", true), v => Pref(new { autoplay = v })),
             Toggle("Autoplay next episode", G.PrefBool("autoplayNext", true), v => Pref(new { autoplayNext = v })),
             Toggle("Keep finished titles in Continue Watching", G.PrefBool("keepCompletedInContinue", false), v => Pref(new { keepCompletedInContinue = v }))));
-        col.Children.Add(Ui.Row(12,
+        col.Children.Add(Ui.Wrap(12,
             Ui.Combo(new[] { ("off", "Off") }.Concat(Langs), G.PrefStr("subtitleLanguage", "off"), v => Pref(new { subtitleLanguage = v }), "Subtitles"),
             Ui.Combo(Langs, G.PrefStr("audioLanguage", "en"), v => Pref(new { audioLanguage = v }), "Audio language"),
             Ui.Combo([("small", "Small"), ("medium", "Medium"), ("large", "Large")], G.PrefStr("subtitleSize", "medium"), v => Pref(new { subtitleSize = v }), "Subtitle size"),
@@ -53,7 +53,7 @@ public sealed class SettingsPage : PageBase
                 Ui.BtnAsync("Remove", async () => { if (await Ui.Confirm("Remove this folder?", "Its titles leave the library. No files are deleted.", "Remove")) { await G.Hub.Delete($"/admin/libraries/{lid}"); Refresh(); } })), 12));
         }
         var path = new TextBox { PlaceholderText = @"D:\Media\Movies", Width = 420 };
-        col.Children.Add(Ui.Row(8, path,
+        col.Children.Add(Ui.Wrap(8, path,
             Ui.BtnAsync("Browse…", async () =>
             {
                 var picker = new FolderPicker(); picker.FileTypeFilter.Add("*");
@@ -90,7 +90,7 @@ public sealed class SettingsPage : PageBase
         col.Children.Add(Ui.Card(Ui.Col(8,
             Ui.Row(10, Ui.Text("Debrid", 16, true), Ui.Combo(prov.O("available").A("debrid").Select(p => (p.S("id")!, p.S("name")!)), deb.S("id") ?? "realdebrid", v => _ = SaveDebrid(new { provider = v }), width: 200)),
             Ui.Text(deb.B("connected") ? $"✓ Connected as {deb.O("account").S("username")}  ·  {deb.O("account").S("plan")}  ·  expires {deb.O("account").S("expiration")?[..10]}" : deb.S("message"), 13, color: deb.B("connected") ? Ui.Hex("#2ECC71") : deb.B("configured") ? Ui.Accent : Ui.Dim),
-            Ui.Row(8, token,
+            Ui.Wrap(8, token,
                 Ui.BtnAsync("Save and test", () => SaveDebrid(new { token = token.Password }), true).With(b => b.VerticalAlignment = VerticalAlignment.Bottom),
                 deb.B("configured") ? Ui.BtnAsync("Test connection", () => SaveDebrid(new { })).With(b => b.VerticalAlignment = VerticalAlignment.Bottom) : null,
                 deb.B("configured") ? Ui.BtnAsync("Disconnect", async () => { if (await Ui.Confirm("Disconnect the debrid account?", "The saved token is erased and its titles become unavailable until you reconnect.", "Disconnect")) { await G.Hub.Delete("/admin/providers/debrid"); Refresh(); } }).With(b => b.VerticalAlignment = VerticalAlignment.Bottom) : null),
@@ -104,7 +104,7 @@ public sealed class SettingsPage : PageBase
             Ui.Text(meta.B("connected") ? "✓ " + meta.S("message") : meta.S("message"), 13, color: meta.B("connected") ? Ui.Hex("#2ECC71") : meta.B("configured") ? Ui.Accent : Ui.Dim),
             Ui.Row(8, key, Ui.BtnAsync("Save and test", async () => { var r = await G.Hub.Put("/admin/providers/metadata", new { apiKey = key.Password }); G.Window.Toast(r.S("message") ?? "", !r.B("connected")); if (r.B("connected")) await G.Hub.Post("/admin/library/scan"); Refresh(); }, true).With(b => b.VerticalAlignment = VerticalAlignment.Bottom),
                 meta.B("configured") ? Ui.BtnAsync("Remove key", async () => { await G.Hub.Put("/admin/providers/metadata", new { apiKey = "" }); Refresh(); }).With(b => b.VerticalAlignment = VerticalAlignment.Bottom) : null),
-            Ui.Row(12,
+            Ui.Wrap(12,
                 Ui.Combo([("en-US", "English (US)"), ("en-GB", "English (UK)"), ("es-ES", "Spanish"), ("fr-FR", "French"), ("de-DE", "German"), ("it-IT", "Italian"), ("pt-BR", "Portuguese"), ("ar-SA", "Arabic"), ("hi-IN", "Hindi")], settings.S("tmdb.language") ?? "en-US", v => _ = SaveSetting("tmdb.language", v), "Metadata language", 200),
                 Ui.Combo([("1", "1 day"), ("7", "7 days"), ("30", "30 days"), ("90", "90 days")], settings.S("cache.metadataDays") ?? "7", v => _ = SaveSetting("cache.metadataDays", v), "Keep metadata for", 160),
                 Ui.Combo([("15", "15 minutes"), ("30", "30 minutes"), ("60", "1 hour"), ("360", "6 hours")], settings.S("scan.intervalMinutes") ?? "30", v => _ = SaveSetting("scan.intervalMinutes", v), "Rescan library every", 170)),
@@ -124,7 +124,7 @@ public sealed class SettingsPage : PageBase
 
         var storage = await G.Hub.Get("/admin/storage");
         col.Children.Add(Ui.Text($"Storage:  database {storage.D("databaseBytes") / 1048576.0:0.#} MB  ·  artwork cache {storage.D("imageCacheBytes") / 1048576.0:0.#} MB ({storage.L("imageCacheFiles")} images)  ·  metadata cache {storage.D("metadataCacheBytes") / 1048576.0:0.#} MB  ·  {storage.S("dataDir")}", 13, color: Ui.Dim).M(0, 8, 0, 0));
-        col.Children.Add(Ui.Row(8,
+        col.Children.Add(Ui.Wrap(8,
             Ui.BtnAsync("Clear cache", async () => { await G.Hub.Post("/admin/cache/clear", new { images = true, metadata = true }); G.Window.Toast("Cache cleared"); Refresh(); }),
             Ui.BtnAsync("Back up…", Backup), Ui.BtnAsync("Restore…", Restore),
             Ui.BtnAsync("Reset DJFlix…", async () =>

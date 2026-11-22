@@ -355,8 +355,11 @@ public sealed class PlayerPage : UserControl
         G.Window.CloseOverlay();   // the window calls Shutdown, which saves the position
     }
 
-    /// <summary>Releases the player. Called by the window whenever this page leaves the screen.</summary>
-    public void Shutdown()
+    /// <summary>
+    /// Stops and releases the player. The window awaits this BEFORE taking the page off screen: LibVLC must have
+    /// stopped rendering into the view's swap chain before that swap chain is destroyed.
+    /// </summary>
+    public async Task ShutdownAsync()
     {
         if (_closed) return;
         if (!_ended && _started) Report("stop");
@@ -364,6 +367,13 @@ public sealed class PlayerPage : UserControl
         if (G.Window.IsFullScreen) G.Window.SetFullScreen(false);
         if (G.Window.IsCompact) G.Window.SetCompact(false);
         var mp = _mp; var vlc = _vlc; _mp = null; _vlc = null;
-        Task.Run(() => { try { mp?.Stop(); mp?.Dispose(); vlc?.Dispose(); } catch { } });
+        if (mp == null) return;
+        try { await Task.Run(() => mp.Stop()); } catch { }
+        try { _video.MediaPlayer = null; } catch { }
+        // Dispose a little later, off the UI thread, once the output has fully wound down.
+        _ = Task.Run(async () => { await Task.Delay(1500); try { mp.Dispose(); vlc?.Dispose(); } catch { } });
     }
+
+    /// <summary>Last-moment save when the whole window is closing.</summary>
+    public void SaveNow() { if (!_closed && !_ended && _started) Report("stop"); }
 }

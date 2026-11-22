@@ -50,8 +50,8 @@ public sealed class ServerPage : PageBase
         var up = TimeSpan.FromMilliseconds(svc.D("uptimeMs"));
 
         col.Children.Add(Ui.Text("Your Media Hub is ready", 20, true));
-        var tiles = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 250, ItemHeight = 92 };
-        void Tile(FrameworkElement e) { e.Margin = new Thickness(0, 0, 10, 10); tiles.Children.Add(e); }
+        var tiles = new WrapPanel { Gap = 10 };
+        void Tile(FrameworkElement e) => tiles.Children.Add(e);
         Tile(Status("Service", $"Running  ·  {(int)up.TotalHours}h {up.Minutes}m", true));
         Tile(Status("Server address", conn.S("address") ?? "No network", conn.S("address") != null));
         Tile(Status("Connected devices", $"{clients.A("connected").Count} online  ·  {clients.L("paired")} paired"));
@@ -64,7 +64,7 @@ public sealed class ServerPage : PageBase
         if (prov.O("debrid").B("configured") && !prov.O("debrid").B("connected")) col.Children.Add(Ui.Text("Debrid: " + prov.O("debrid").S("message"), 13, color: Ui.Accent));
         if (prov.O("metadata").B("configured") && !prov.O("metadata").B("connected")) col.Children.Add(Ui.Text("Metadata: " + prov.O("metadata").S("message"), 13, color: Ui.Accent));
 
-        col.Children.Add(Ui.Row(8,
+        col.Children.Add(Ui.Wrap(8,
             Ui.BtnAsync("Restart service", async () => { var (ok, msg) = await HubHost.Restart(); G.Window.Toast(msg, !ok); Refresh(); }),
             Ui.BtnAsync("Stop service", async () => { if (await Ui.Confirm("Stop the DJFlix service?", "Fire TV devices will be disconnected and this app will not be able to browse or play until it is started again.", "Stop")) { var (ok, msg) = await HubHost.Stop(); G.Window.Toast(msg, !ok); Refresh(); } }),
             Ui.BtnAsync("Scan library now", async () => { await G.Hub.Post("/admin/library/scan"); G.Window.Toast("Library scan started"); }),

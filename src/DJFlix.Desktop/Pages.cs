@@ -106,7 +106,7 @@ public sealed class ProfilesPage : UserControl
             var genres = (await G.Hub.Get("/genres")).List().Select(g => g.S("name")!).ToList();
             var fav = prefs.Strings("favouriteGenres");
             var genreBoxes = genres.Select(g => new CheckBox { Content = g, IsChecked = fav.Contains(g), MinWidth = 150 }).ToList();
-            var genreGrid = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, MaximumRowsOrColumns = 3 };
+            var genreGrid = new WrapPanel { Gap = 4, MaxWidth = 500 };
             foreach (var g in genreBoxes) genreGrid.Children.Add(g);
             var delete = p == null ? null : new CheckBox { Content = "Delete this profile and all of its history", Foreground = Ui.Accent };
             var form = new ScrollViewer { MaxHeight = 520, Content = Ui.Col(12, name, Ui.Row(12, avatar, color), Ui.Row(12, maturity, lang), unrated, pin, removePin, genres.Count > 0 ? Ui.Text("Favourite genres", 14, true) : null, genreGrid, delete).With(c => c.Padding = new Thickness(0, 0, 16, 0)) };
@@ -219,16 +219,15 @@ public sealed class BrowsePage(string type) : PageBase
 
         var search = new TextBox { PlaceholderText = type == "movie" ? "Search movies" : "Search TV shows", Text = _q, Width = 200, VerticalAlignment = VerticalAlignment.Bottom };
         search.KeyDown += (_, e) => { if (e.Key == Windows.System.VirtualKey.Enter) Set(() => _q = search.Text.Trim()); };
-        var bar = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemHeight = 62, Margin = new Thickness(40, 0, 40, 0) };
-        void AddBar(FrameworkElement e) { e.Margin = new Thickness(0, 0, 10, 0); e.VerticalAlignment = VerticalAlignment.Bottom; VariableSizedWrapGrid.SetColumnSpan(e, 1); bar.Children.Add(e); }
-        bar.ItemWidth = 184;
+        var bar = new WrapPanel { Gap = 10, Margin = new Thickness(40, 0, 40, 0) };
+        void AddBar(FrameworkElement e) { e.VerticalAlignment = VerticalAlignment.Bottom; bar.Children.Add(e); }
         AddBar(Ui.Combo(new[] { ("", "All genres") }.Concat(genres.Select(g => (g.S("name")!, $"{g.S("name")} ({g.L("count")})"))), _genre, v => Set(() => _genre = v), "Genre"));
         AddBar(Ui.Combo(new[] { ("", "Any year") }.Concat(res.A("years").Select(y => (y.ToString(), y.ToString()))), _year, v => Set(() => _year = v), "Year"));
         AddBar(Ui.Combo([("", "Any rating"), ("8", "8+ ★"), ("7", "7+ ★"), ("6", "6+ ★"), ("5", "5+ ★")], _rating, v => Set(() => _rating = v), "Rating"));
         AddBar(Ui.Combo([("popularity", "Popularity"), ("title", "Title"), ("year", "Release year"), ("added", "Date added"), ("rating", "Rating")], _sort, v => Set(() => { _sort = v; Local.Set("sort." + type, v); }), "Sort by"));
         AddBar(Ui.Combo([("all", "Everything"), ("unwatched", "Unwatched"), ("watched", "Watched"), ("mylist", "On My List")], _watched, v => Set(() => _watched = v), "Show"));
         AddBar(Ui.Combo([("grid", "Grid"), ("rows", "Carousels")], _layout, v => Set(() => { _layout = v; Local.Set("layout." + type, v); }), "Layout"));
-        AddBar(search); VariableSizedWrapGrid.SetColumnSpan(search, 2);
+        AddBar(search);
 
         var col = new StackPanel();
         col.Children.Add(Ui.Row(12, Ui.H1(type == "movie" ? "Movies" : "TV Shows"), Ui.Text($"{res.L("total")} titles", 14, color: Ui.Faint).With(t => t.VerticalAlignment = VerticalAlignment.Bottom).M(0, 0, 0, 6)).M(40, 10, 40, 6));
@@ -328,11 +327,11 @@ public sealed class StatsPage : PageBase
         var col = new StackPanel { Margin = new Thickness(40, 10, 40, 40) };
         col.Children.Add(Ui.H1("Statistics"));
         col.Children.Add(Ui.H2($"{G.Profile.S("name")}'s viewing"));
-        col.Children.Add(Ui.Row(12, Stat($"{hours:0.#} h", "Watch time"), Stat(mine.L("moviesCompleted").ToString(), "Movies finished"), Stat(mine.L("episodesCompleted").ToString(), "Episodes finished"), Stat(mine.L("watchlistCount").ToString(), "On My List"), Stat(mine.L("ratingsCount").ToString(), "Titles rated")));
+        col.Children.Add(Ui.Wrap(12, Stat($"{hours:0.#} h", "Watch time"), Stat(mine.L("moviesCompleted").ToString(), "Movies finished"), Stat(mine.L("episodesCompleted").ToString(), "Episodes finished"), Stat(mine.L("watchlistCount").ToString(), "On My List"), Stat(mine.L("ratingsCount").ToString(), "Titles rated")));
         if (mine.A("genres").Count > 0) { col.Children.Add(Ui.H2("Watch time by genre")); col.Children.Add(Bars(mine.A("genres").Take(10).Select(g => (g.S("name")!, g.D("watchTimeMs"), $"{g.D("watchTimeMs") / 3600000.0:0.#} h")))); }
         if (mine.A("recentActivity").Count > 0) { col.Children.Add(Ui.H2("Recent activity")); foreach (var a in mine.A("recentActivity")) col.Children.Add(Ui.Text($"{DateTimeOffset.FromUnixTimeMilliseconds(a.L("watchedAt")).LocalDateTime:g}   {a.S("title")}{(a.B("isCompleted") ? "  ✓" : "")}", 13, color: Ui.Dim)); }
         col.Children.Add(Ui.H2("Library"));
-        col.Children.Add(Ui.Row(12, Stat(lib.L("movies").ToString(), "Movies"), Stat(lib.L("shows").ToString(), "TV shows"), Stat(lib.L("episodes").ToString(), "Episodes"), Stat($"{lib.D("localBytes") / 1073741824.0:0.#} GB", "Local files"), Stat(lib.L("debridFiles").ToString(), "Debrid files"), Stat(lib.L("unmatched").ToString(), "Unmatched")));
+        col.Children.Add(Ui.Wrap(12, Stat(lib.L("movies").ToString(), "Movies"), Stat(lib.L("shows").ToString(), "TV shows"), Stat(lib.L("episodes").ToString(), "Episodes"), Stat($"{lib.D("localBytes") / 1073741824.0:0.#} GB", "Local files"), Stat(lib.L("debridFiles").ToString(), "Debrid files"), Stat(lib.L("unmatched").ToString(), "Unmatched")));
         if (lib.A("genres").Count > 0) { col.Children.Add(Ui.H2("Titles by genre")); col.Children.Add(Bars(lib.A("genres").Take(12).Select(g => (g.S("name")!, g.D("count"), g.L("count").ToString())))); }
         if (lib.A("byDecade").Count > 0) { col.Children.Add(Ui.H2("Titles by decade")); col.Children.Add(Bars(lib.A("byDecade").Select(g => ($"{g.L("decade")}s", g.D("count"), g.L("count").ToString())))); }
         return col;
@@ -355,8 +354,8 @@ public sealed class SearchPage(string initial) : PageBase
             var recent = (await G.Hub.Get($"/profiles/{G.Pid}/search-history")).List().Select(x => x.ToString()).ToList();
             if (recent.Count == 0) { col.Children.Add(Ui.Empty("Find something to watch", "Type in the search box at the top. You can search by title, actor, director, genre or collection.")); return col; }
             col.Children.Add(Ui.Text("Recent searches", 16, true).M(40, 10, 40, 6));
-            var chips = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, Margin = new Thickness(40, 0, 40, 0) };
-            foreach (var r in recent) chips.Children.Add(Ui.Btn(r, () => Query(r, false)).M(0, 0, 8, 8));
+            var chips = new WrapPanel { Margin = new Thickness(40, 0, 40, 0) };
+            foreach (var r in recent) chips.Children.Add(Ui.Btn(r, () => Query(r, false)));
             col.Children.Add(chips);
             col.Children.Add(Ui.BtnAsync("Clear search history", async () => { await G.Hub.Delete($"/profiles/{G.Pid}/search-history"); Refresh(); }).M(40, 10, 40, 0));
             return col;
@@ -365,8 +364,8 @@ public sealed class SearchPage(string initial) : PageBase
         var people = res.A("people");
         if (people.Count > 0)
         {
-            var chips = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, Margin = new Thickness(40, 4, 40, 0) };
-            foreach (var p in people) chips.Children.Add(Ui.Btn($"{p.S("name")}  ·  {p.S("role")}  ·  {p.L("titles")}", () => G.Window.Go(new PersonPage(p.S("name")!))).M(0, 0, 8, 8));
+            var chips = new WrapPanel { Margin = new Thickness(40, 4, 40, 0) };
+            foreach (var p in people) chips.Children.Add(Ui.Btn($"{p.S("name")}  ·  {p.S("role")}  ·  {p.L("titles")}", () => G.Window.Go(new PersonPage(p.S("name")!))));
             col.Children.Add(chips);
         }
         foreach (var c in res.Strings("collections")) col.Children.Add(Ui.Text("Collection: " + c, 13, color: Ui.Dim).M(40, 2, 40, 0));

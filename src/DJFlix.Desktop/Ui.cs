@@ -62,6 +62,7 @@ public static class Ui
     }
 
     public static StackPanel Row(double spacing, params UIElement?[] kids) { var p = new StackPanel { Orientation = Orientation.Horizontal, Spacing = spacing }; foreach (var k in kids) if (k != null) p.Children.Add(k); return p; }
+    public static WrapPanel Wrap(double gap, params UIElement?[] kids) { var p = new WrapPanel { Gap = gap }; foreach (var k in kids) if (k != null) p.Children.Add(k); return p; }
     public static StackPanel Col(double spacing, params UIElement?[] kids) { var p = new StackPanel { Spacing = spacing }; foreach (var k in kids) if (k != null) p.Children.Add(k); return p; }
     public static T With<T>(this T e, Action<T> f) where T : class { f(e); return e; }
     public static T M<T>(this T e, double l, double t, double r, double b) where T : FrameworkElement { e.Margin = new Thickness(l, t, r, b); return e; }
@@ -196,6 +197,36 @@ public static class Ui
         if (cb.SelectedIndex < 0 && cb.Items.Count > 0) cb.SelectedIndex = 0;
         cb.SelectionChanged += (_, _) => { if (cb.SelectedItem is ComboBoxItem i) onChange((string)i.Tag); };
         return cb;
+    }
+}
+
+/// <summary>Lays children out left to right and wraps to a new line, each child at its own size.</summary>
+public sealed class WrapPanel : Panel
+{
+    public double Gap { get; set; } = 8;
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size available)
+    {
+        double x = 0, y = 0, line = 0, width = 0;
+        foreach (var c in Children)
+        {
+            c.Measure(new Windows.Foundation.Size(available.Width, double.PositiveInfinity));
+            var d = c.DesiredSize;
+            if (x > 0 && x + d.Width > available.Width) { x = 0; y += line + Gap; line = 0; }
+            x += d.Width + Gap; line = Math.Max(line, d.Height); width = Math.Max(width, x - Gap);
+        }
+        return new Windows.Foundation.Size(double.IsInfinity(available.Width) ? width : Math.Min(width, available.Width), y + line);
+    }
+    protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size final)
+    {
+        double x = 0, y = 0, line = 0;
+        foreach (var c in Children)
+        {
+            var d = c.DesiredSize;
+            if (x > 0 && x + d.Width > final.Width) { x = 0; y += line + Gap; line = 0; }
+            c.Arrange(new Windows.Foundation.Rect(x, y, d.Width, d.Height));
+            x += d.Width + Gap; line = Math.Max(line, d.Height);
+        }
+        return final;
     }
 }
 

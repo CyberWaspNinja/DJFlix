@@ -27,7 +27,18 @@ public sealed class MainWindow : Window
     public MainWindow()
     {
         Title = "DJFlix";
-        try { AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 900)); } catch { }
+        try
+        {
+            // Fit the work area of the current display; small screens get a maximised-size window instead of an oversized one.
+            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            int w = Math.Min(1440, area.Width), h = Math.Min(900, area.Height);
+            AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(area.X + (area.Width - w) / 2, area.Y + (area.Height - h) / 2, w, h));
+            var tb = AppWindow.TitleBar; var dark = Ui.Dark;
+            var bg = dark ? Windows.UI.Color.FromArgb(255, 11, 11, 13) : Windows.UI.Color.FromArgb(255, 245, 245, 247); var fg = dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+            tb.BackgroundColor = bg; tb.InactiveBackgroundColor = bg; tb.ButtonBackgroundColor = bg; tb.ButtonInactiveBackgroundColor = bg;
+            tb.ForegroundColor = fg; tb.ButtonForegroundColor = fg; tb.InactiveForegroundColor = fg;
+        }
+        catch { }
         _root.Background = Ui.Bg;
         _root.RequestedTheme = Ui.Dark ? ElementTheme.Dark : ElementTheme.Light;
         Content = _root;
@@ -72,7 +83,9 @@ public sealed class MainWindow : Window
         back.Invoked += (_, e) => { e.Handled = true; Back(); };
         _nav.KeyboardAccelerators.Add(back);
 
-        Closed += (_, _) => { foreach (var p in _overlay.Children.OfType<PlayerPage>()) p.Shutdown(); HubHost.OnAppExit(); };
+        // Leaving with a video open: save the position, give the request a moment, then end the process outright
+        // rather than tearing the video pipeline down mid-frame.
+        Closed += (_, _) => { var playing = _overlay.Children.OfType<PlayerPage>().ToList(); foreach (var p in playing) p.SaveNow(); if (playing.Count > 0) Thread.Sleep(600); HubHost.OnAppExit(); if (playing.Count > 0) Environment.Exit(0); };
         _ = Startup();
     }
 
@@ -95,9 +108,9 @@ public sealed class MainWindow : Window
     }
 
     // ---- navigation ------------------------------------------------------------------------
-    void ClearOverlay() { foreach (var p in _overlay.Children.OfType<PlayerPage>().ToList()) p.Shutdown(); _overlay.Children.Clear(); }
-    public void ShowOverlay(UIElement page) { ClearOverlay(); _overlay.Children.Add(page); }
-    public void CloseOverlay() { ClearOverlay(); if (_host.Content is IRefresh r) r.Refresh(); }
+    async Task ClearOverlay() { foreach (var p in _overlay.Children.OfType<PlayerPage>().ToList()) await p.ShutdownAsync(); _overlay.Children.Clear(); }
+    public async void ShowOverlay(UIElement page) { await ClearOverlay(); _overlay.Children.Add(page); }
+    public async void CloseOverlay() { await ClearOverlay(); if (_host.Content is IRefresh r) r.Refresh(); }
     public void ShowProfiles() => ShowOverlay(new ProfilesPage());
 
     public void SetProfile(JsonNode p)
