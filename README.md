@@ -8,8 +8,17 @@ Personal media ecosystem: a Windows hub (service + desktop app) and a Fire TV cl
 |---|---|
 | `src/DJFlix.Server` — hub service, REST API v1, SQLite, pairing, sync, TMDB + Real-Debrid connectors, library scanner | Built and tested in CI on Windows and Linux (103 end-to-end checks, `tests/e2e.py`) |
 | Windows Service hosting and firewall rule | Compiles on Windows; not yet exercised (needs the installer) |
+| `firetv/` — Fire TV app (Kotlin, Compose, Media3): setup wizard, pairing, profiles, home, browse, search, details, player, settings | Built in CI; smoke-tested on an Android TV emulator (pairs, plays, reports progress). Not yet run on a physical Fire TV |
 | WinUI 3 desktop app, installer | Not started |
-| Fire TV app (Kotlin, Media3) | Not started |
+
+## Install the Fire TV app
+
+1. Download `DJFlix-FireTV.apk` from this repo's Releases page ("DJFlix Fire TV (latest build)").
+2. On the Fire TV: Settings → My Fire TV → Developer options → turn on ADB debugging. Note the IP under About → Network.
+3. From a PC with adb: `adb connect <fire-tv-ip>:5555` then `adb install -r DJFlix-FireTV.apk`.
+
+Every build is signed with the same key (`firetv/sideload.keystore`), so new builds install over old ones.
+Screenshots from the latest emulator run are on the `ci-screenshots` branch.
 
 ## Run the hub
 
