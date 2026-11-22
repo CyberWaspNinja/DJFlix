@@ -184,7 +184,7 @@ public sealed class Db : IDisposable
 
     public void Migrate()
     {
-        foreach (var s in Schema.Split(";\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) Exec(s);
+        foreach (var s in Schema.Replace("\r", "").Split(";\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) Exec(s);
         if (Get("schema.version") == null) Set("schema.version", "1");
     }
 
