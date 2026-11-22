@@ -22,7 +22,8 @@ public sealed class MainWindow : Window
     readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(280) };
     readonly Button _profileBtn = new() { CornerRadius = new CornerRadius(16), Padding = new Thickness(12, 6, 12, 6) };
     public IntPtr Hwnd => WinRT.Interop.WindowNative.GetWindowHandle(this);
-    public bool PlayerOpen => _overlay.Children.OfType<PlayerPage>().Any();
+    PlayerPage? _player;
+    public bool PlayerOpen => _player?.Active == true;
 
     public MainWindow()
     {
@@ -72,6 +73,8 @@ public sealed class MainWindow : Window
         _search.QuerySubmitted += (_, _) => RunSearch(true);
         _searchTimer.Tick += (_, _) => { _searchTimer.Stop(); RunSearch(false); };
 
+        _nav.Background = Ui.Bg;   // opaque, so the idle player behind the shell never shows through
+        Canvas.SetZIndex(_overlay, 60); Canvas.SetZIndex(_toast, 70);
         _root.Children.Add(_nav); _root.Children.Add(_overlay); _root.Children.Add(_toast);
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); _toast.IsOpen = false; };
 
@@ -85,7 +88,7 @@ public sealed class MainWindow : Window
 
         // Leaving with a video open: save the position, give the request a moment, then end the process outright
         // rather than tearing the video pipeline down mid-frame.
-        Closed += (_, _) => { var playing = _overlay.Children.OfType<PlayerPage>().ToList(); foreach (var p in playing) p.SaveNow(); if (playing.Count > 0) Thread.Sleep(600); HubHost.OnAppExit(); if (playing.Count > 0) Environment.Exit(0); };
+        Closed += (_, _) => { var playing = PlayerOpen; _player?.SaveNow(); if (playing) Thread.Sleep(600); HubHost.OnAppExit(); if (_player != null) Environment.Exit(0); };
         _ = Startup();
     }
 
@@ -108,9 +111,17 @@ public sealed class MainWindow : Window
     }
 
     // ---- navigation ------------------------------------------------------------------------
-    async Task ClearOverlay() { foreach (var p in _overlay.Children.OfType<PlayerPage>().ToList()) await p.ShutdownAsync(); _overlay.Children.Clear(); }
-    public async void ShowOverlay(UIElement page) { await ClearOverlay(); _overlay.Children.Add(page); }
-    public async void CloseOverlay() { await ClearOverlay(); if (_host.Content is IRefresh r) r.Refresh(); }
+    public async void ShowOverlay(UIElement page) { await HidePlayer(); _overlay.Children.Clear(); _overlay.Children.Add(page); }
+    public void CloseOverlay() { _overlay.Children.Clear(); if (_host.Content is IRefresh r) r.Refresh(); }
+
+    async Task HidePlayer()
+    {
+        if (_player == null) return;
+        await _player.CloseAsync();
+        Canvas.SetZIndex(_player, -1); _player.IsHitTestVisible = false; _player.Opacity = 0;
+    }
+    /// <summary>Leaves the player and returns to the page underneath, which reloads to show the new progress.</summary>
+    public async void ClosePlayer() { await HidePlayer(); if (_host.Content is IRefresh r) r.Refresh(); }
     public void ShowProfiles() => ShowOverlay(new ProfilesPage());
 
     public void SetProfile(JsonNode p)
@@ -152,7 +163,13 @@ public sealed class MainWindow : Window
         else if (q.Length > 0) Show(new SearchPage(q));
     }
 
-    public void Play(long mediaId, long? episodeId = null, bool startOver = false, long? sourceId = null) => ShowOverlay(new PlayerPage(mediaId, episodeId, startOver, sourceId));
+    public void Play(long mediaId, long? episodeId = null, bool startOver = false, long? sourceId = null)
+    {
+        // The player is created on first use and then kept: it sits behind the shell when idle and is raised to play.
+        if (_player == null) { _player = new PlayerPage(); _root.Children.Insert(0, _player); }
+        Canvas.SetZIndex(_player, 50); _player.IsHitTestVisible = true; _player.Opacity = 1;
+        _player.Start(mediaId, episodeId, startOver, sourceId);
+    }
 
     public void Toast(string message, bool error = false)
     {
@@ -181,11 +198,13 @@ public static class Autopilot
             var first = (await G.Hub.Get($"/movies?profileId={G.Pid}&sort=title")).A("items").FirstOrDefault();
             if (first == null) return;
             G.Window.Go(new DetailsPage(first.L("id"))); await Task.Delay(7000);
-            G.Window.Play(first.L("id")); await Task.Delay(24000);
-            G.Window.CloseOverlay(); await Task.Delay(1000);
-            G.Window.Root("server"); await Task.Delay(8000);
-            G.Window.Root("settings"); await Task.Delay(8000);
-            G.Window.Root("home"); await Task.Delay(6000);
+            Local.Log("autopilot: play"); G.Window.Play(first.L("id")); await Task.Delay(24000);
+            Local.Log("autopilot: close player"); G.Window.ClosePlayer(); await Task.Delay(3000);
+            Local.Log("autopilot: server"); G.Window.Root("server"); await Task.Delay(8000);
+            Local.Log("autopilot: settings"); G.Window.Root("settings"); await Task.Delay(8000);
+            Local.Log("autopilot: play again"); G.Window.Play(first.L("id")); await Task.Delay(9000);
+            Local.Log("autopilot: close player again"); G.Window.ClosePlayer(); await Task.Delay(3000);
+            Local.Log("autopilot: home"); G.Window.Root("home"); await Task.Delay(6000);
             Local.Log("autopilot finished");
         }
         catch (Exception e) { Local.Log("autopilot failed: " + e); }

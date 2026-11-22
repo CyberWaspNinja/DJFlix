@@ -47,7 +47,7 @@ $appProc = Start-Process "$App\DJFlix.exe" -PassThru
 Start-Sleep 4; Shot '01-start'
 if ($appProc.HasExited) { Fail "app exited at launch (code $($appProc.ExitCode))" }
 # The autopilot walks: profiles → home → movies → details → player → server → settings → home.
-$plan = @(@(4, '02-profiles'), @(8, '03-home'), @(8, '04-movies'), @(7, '05-details'), @(9, '06-player'), @(10, '07-player-later'), @(8, '08-server'), @(8, '09-settings'), @(8, '10-home-after'))
+$plan = @(@(4, '02-profiles'), @(8, '03-home'), @(8, '04-movies'), @(7, '05-details'), @(9, '06-player'), @(10, '07-player-later'), @(12, '08-server'), @(8, '09-settings'), @(7, '10-player-again'), @(9, '11-home-after'))
 foreach ($s in $plan) { Start-Sleep $s[0]; Shot $s[1]; if ($appProc.HasExited) { Fail "app exited during $($s[1]) (code $($appProc.ExitCode))"; break } }
 
 $cw = Api GET /profiles/1/continue-watching

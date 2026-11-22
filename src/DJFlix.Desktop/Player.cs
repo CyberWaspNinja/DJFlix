@@ -23,7 +23,8 @@ sealed class TimeTip : IValueConverter
 public sealed class PlayerPage : UserControl
 {
     static readonly float[] Speeds = [0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f];
-    readonly long _mediaId; long? _episodeId; bool _startOver; long? _sourceId;
+    long _mediaId; long? _episodeId; bool _startOver; long? _sourceId; bool _ready; Grid? _errorPanel;
+    public bool Active { get; private set; }
     readonly Grid _root = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Black) };
     readonly VideoView _video = new();
     readonly Grid _chrome = new();
@@ -54,10 +55,13 @@ public sealed class PlayerPage : UserControl
         ToolTipService.SetToolTip(b, tip); return b;
     }
 
-    public PlayerPage(long mediaId, long? episodeId, bool startOver, long? sourceId)
+    /// <summary>
+    /// One player lives for the whole session and is reused for every title. LibVLC's WinUI video view does not
+    /// survive being torn down and rebuilt, so the view is created once and only ever stopped, never disposed.
+    /// </summary>
+    public PlayerPage()
     {
-        _mediaId = mediaId; _episodeId = episodeId; _startOver = startOver; _sourceId = sourceId;
-        _speed = (float)G.PrefNum("playbackSpeed", 1);
+        _speed = 1;
         RequestedTheme = ElementTheme.Dark;
         BuildChrome();
         _root.Children.Add(_video); _root.Children.Add(_layer); _root.Children.Add(_busy); _root.Children.Add(_osdBox);
@@ -65,12 +69,22 @@ public sealed class PlayerPage : UserControl
         Content = _root;
         IsTabStop = true;
 
-        _video.Initialized += (_, e) => { _swap = e.SwapChainOptions; _ = Begin(); };
+        _video.Initialized += (_, e) => { _swap = e.SwapChainOptions; _ready = true; if (Active) _ = Begin(); };
         _tick.Tick += (_, _) => Tick();
         _osdTimer.Tick += (_, _) => { _osdTimer.Stop(); _osdBox.Visibility = Visibility.Collapsed; };
         _root.PointerMoved += (_, _) => Wake();
         _root.PreviewKeyDown += OnKey;
-        Loaded += (_, _) => _playBtn.Focus(FocusState.Programmatic);
+    }
+
+    public void Start(long mediaId, long? episodeId, bool startOver, long? sourceId)
+    {
+        _mediaId = mediaId; _episodeId = episodeId; _startOver = startOver; _sourceId = sourceId;
+        Active = true; _closed = false; _refreshed = false; _session = null; _pos = 0; _len = 0;
+        _speed = (float)G.PrefNum("playbackSpeed", 1); BuildSpeedMenu();
+        if (_errorPanel != null) { _root.Children.Remove(_errorPanel); _errorPanel = null; }
+        _title.Text = ""; _sub.Text = ""; _time.Text = "0:00 / 0:00"; _busy.Visibility = Visibility.Visible;
+        _playBtn.Focus(FocusState.Programmatic);
+        if (_ready) _ = Begin();   // otherwise playback begins as soon as the video surface reports ready
     }
 
     // ---- UI -------------------------------------------------------------------------------
@@ -250,7 +264,8 @@ public sealed class PlayerPage : UserControl
     void ShowError(string message)
     {
         _busy.Visibility = Visibility.Collapsed;
-        var panel = new Grid { Background = Ui.Argb(235, 0, 0, 0) };
+        if (_errorPanel != null) _root.Children.Remove(_errorPanel);
+        var panel = new Grid { Background = Ui.Argb(235, 0, 0, 0) }; _errorPanel = panel;
         panel.Children.Add(Ui.Col(10, Ui.Text("Can't play this title", 22, true, new SolidColorBrush(Microsoft.UI.Colors.White)).With(t => t.HorizontalAlignment = HorizontalAlignment.Center),
             Ui.Text(message, 14, color: Ui.Argb(255, 190, 190, 196)).With(t => { t.MaxWidth = 560; t.TextAlignment = TextAlignment.Center; t.HorizontalAlignment = HorizontalAlignment.Center; }),
             Ui.Row(10, Ui.Btn("Try again", () => { _root.Children.Remove(panel); _refreshed = false; if (_session != null && _mp != null) { _started = false; Open(_pos, _session.S("kind") == "debrid"); } else _ = Begin(); }, true), Ui.Btn("Close", () => Exit(false))).With(r => r.HorizontalAlignment = HorizontalAlignment.Center)).With(c => c.VerticalAlignment = VerticalAlignment.Center));
@@ -352,28 +367,22 @@ public sealed class PlayerPage : UserControl
     void Exit(bool report = true)
     {
         if (_closed) return;
-        G.Window.CloseOverlay();   // the window calls Shutdown, which saves the position
+        G.Window.ClosePlayer();
     }
 
-    /// <summary>
-    /// Stops and releases the player. The window awaits this BEFORE taking the page off screen: LibVLC must have
-    /// stopped rendering into the view's swap chain before that swap chain is destroyed.
-    /// </summary>
-    public async Task ShutdownAsync()
+    /// <summary>Saves the position and stops playback. The view and LibVLC stay alive for the next title.</summary>
+    public async Task CloseAsync()
     {
-        if (_closed) return;
+        if (!Active) return;
         if (!_ended && _started) Report("stop");
-        _closed = true; _tick.Stop(); _osdTimer.Stop();
+        Active = false; _closed = true; _tick.Stop(); _osdTimer.Stop(); _countdown = -1; _extra.Children.Clear();
         if (G.Window.IsFullScreen) G.Window.SetFullScreen(false);
         if (G.Window.IsCompact) G.Window.SetCompact(false);
-        var mp = _mp; var vlc = _vlc; _mp = null; _vlc = null;
-        if (mp == null) return;
-        try { await Task.Run(() => mp.Stop()); } catch { }
-        try { _video.MediaPlayer = null; } catch { }
-        // Dispose a little later, off the UI thread, once the output has fully wound down.
-        _ = Task.Run(async () => { await Task.Delay(1500); try { mp.Dispose(); vlc?.Dispose(); } catch { } });
+        var mp = _mp;
+        if (mp != null) { try { await Task.Run(() => mp.Stop()); } catch { } }
+        _busy.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>Last-moment save when the whole window is closing.</summary>
-    public void SaveNow() { if (!_closed && !_ended && _started) Report("stop"); }
+    public void SaveNow() { if (Active && !_ended && _started) Report("stop"); }
 }
