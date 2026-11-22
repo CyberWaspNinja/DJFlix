@@ -1,0 +1,31 @@
+name: server
+on:
+  push:
+    paths: ['src/DJFlix.Server/**', 'tests/**', '.github/workflows/server.yml']
+  workflow_dispatch:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet build src/DJFlix.Server -c Release
+      - run: python tests/e2e.py src/DJFlix.Server/bin/Release/net8.0/DJFlix.Server.dll
+        env:
+          PYTHONIOENCODING: utf-8
+      - if: matrix.os == 'windows-latest'
+        run: dotnet publish src/DJFlix.Server -c Release -r win-x64 --self-contained false -o publish/server
+      - if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: djflix-server-win-x64
+          path: publish/server
