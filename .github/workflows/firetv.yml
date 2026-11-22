@@ -1,7 +1,7 @@
 name: firetv
 on:
   push:
-    paths: ['firetv/**', '.github/workflows/firetv.yml']
+    paths: ['firetv/**', 'tests/firetv_smoke.sh', 'tests/fake_upstream.py', '.github/workflows/firetv.yml']
   workflow_dispatch:
 jobs:
   apk:
@@ -21,3 +21,51 @@ jobs:
         with:
           name: DJFlix-FireTV-apk
           path: DJFlix-FireTV.apk
+
+  # Installs the APK on an Android TV emulator and drives it with remote keys against a real hub.
+  smoke:
+    needs: apk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: DJFlix-FireTV-apk
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: |
+          dotnet build src/DJFlix.Server -c Release -v q
+          pip install pillow
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash tests/firetv_smoke.sh src/DJFlix.Server/bin/Release/net8.0/DJFlix.Server.dll DJFlix-FireTV.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: firetv-smoke
+          path: |
+            shots
+            logcat.txt
+            hub.log
+      - name: Publish screenshots to the ci-screenshots branch
+        if: always()
+        run: |
+          mkdir /tmp/pub && cp -r shots /tmp/pub/ 2>/dev/null; tail -c 200000 logcat.txt > /tmp/pub/logcat-tail.txt 2>/dev/null || true
+          cd /tmp/pub && git init -q -b ci-screenshots && git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Fire TV smoke screenshots for ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-screenshots

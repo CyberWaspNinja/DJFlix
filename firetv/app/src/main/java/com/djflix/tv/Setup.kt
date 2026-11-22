@@ -27,13 +27,15 @@ private data class Check(val label: String, val ok: Boolean?, val detail: String
  * It can be re-entered at any step from Settings.
  */
 @Composable
-fun SetupWizard(app: AppState, startAt: String) {
+fun SetupWizard(app: AppState, link: Screen.Setup) {
+    val startAt = link.startAt
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(startAt) }
     var net by remember { mutableStateOf(detectNetwork(ctx)) }
-    var host by remember { mutableStateOf(app.cfg.host) }
-    var port by remember { mutableStateOf(app.cfg.port.toString()) }
+    var host by remember { mutableStateOf(link.host ?: app.cfg.host) }
+    var port by remember { mutableStateOf((link.port ?: app.cfg.port).toString()) }
+    var linkCode by remember { mutableStateOf(link.code) }
     var health by remember { mutableStateOf<JSONObject?>(null) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(step) { delay(120); runCatching { focus.requestFocus() } }
@@ -178,6 +180,7 @@ fun SetupWizard(app: AppState, startAt: String) {
                         }
                     }
                     checks = out.toList(); running = false
+                    if (canPair && !alreadyPaired && linkCode != null) step = "pair"
                     delay(100); runCatching { focus.requestFocus() }
                 }
                 Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -209,6 +212,15 @@ fun SetupWizard(app: AppState, startAt: String) {
                 var error by remember { mutableStateOf<String?>(null) }
 
                 fun finish(res: JSONObject) { saveServer(app, host, port, health, res); app.say("Paired with ${app.cfg.serverName}."); app.reset(Screen.Profiles) }
+
+                // A code supplied by a connect link is tried once, automatically.
+                LaunchedEffect(Unit) {
+                    val c = linkCode ?: return@LaunchedEffect
+                    linkCode = null; busy = true
+                    runCatching { app.api.call("POST", "/pair/request", json("deviceName" to deviceName(), "deviceKind" to "firetv", "code" to c), base = base, auth = false) as JSONObject }
+                        .onSuccess { finish(it) }.onFailure { error = it.message }
+                    busy = false
+                }
 
                 // While waiting for approval on the PC, poll until it is approved, denied or expires.
                 LaunchedEffect(waiting) {

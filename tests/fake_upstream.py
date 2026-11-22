@@ -15,6 +15,21 @@ SHOWS = {1396: dict(name="Breaking Bad", first_air_date="2008-01-20", genres=["D
 STATE = {"rd_mode": "ok", "rd_calls": 0, "unrestrict": 0}
 BLOB = bytes(range(256)) * 400   # 102400 bytes of predictable content
 
+def artwork(path):
+    """A real JPEG (title on a coloured field) when Pillow is installed, so client screenshots look right."""
+    try:
+        from PIL import Image, ImageDraw
+        import io, zlib
+        wide = "backdrop" in path or "still" in path
+        h = zlib.crc32(path.rsplit("/", 1)[-1].encode())
+        im = Image.new("RGB", (640, 360) if wide else (342, 513), (40 + h % 120, 30 + (h >> 8) % 90, 60 + (h >> 16) % 130))
+        d = ImageDraw.Draw(im); n = re.sub(r"\D", "", path.rsplit("/", 1)[-1])
+        title = (MOVIES.get(int(n), {}).get("title") or SHOWS.get(int(n), {}).get("name") or "") if n else ""
+        d.text((20, 20), title or path.rsplit("/", 1)[-1], fill=(255, 255, 255))
+        b = io.BytesIO(); im.save(b, "JPEG"); return b.getvalue()
+    except Exception:
+        return b"\xff\xd8fakejpeg" + path.encode()
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, code, obj, headers=None):
@@ -50,7 +65,7 @@ class H(BaseHTTPRequestHandler):
                 a, b = re.match(r"bytes=(\d+)-(\d*)", rng).groups(); a = int(a); b = int(b) if b else len(BLOB) - 1
                 data = BLOB[a:b + 1]; code = 206; hdr["Content-Range"] = f"bytes {a}-{b}/{len(BLOB)}"
             return self.send(code, data, hdr)
-        if p.startswith("/img/"): return self.send(200, b"\xff\xd8fakejpeg" + p.encode(), {"Content-Type": "image/jpeg"})
+        if p.startswith("/img/"): return self.send(200, artwork(p), {"Content-Type": "image/jpeg"})
         if p.startswith("/rd/"):
             if not self.rd_ok(): return
             if p == "/rd/user": return self.send(200, {"username": "dg", "type": "premium", "expiration": "2027-01-01T00:00:00.000Z", "premium": 999})

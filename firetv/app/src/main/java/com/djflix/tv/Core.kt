@@ -179,7 +179,8 @@ fun deviceName(): String = "Fire TV (${Build.MODEL})"
 
 // ---- app state & navigation -----------------------------------------------------------------
 sealed class Screen {
-    data class Setup(val startAt: String = "network") : Screen()
+    /** host/port/code are pre-filled when the app is opened from a djflix://connect link. */
+    data class Setup(val startAt: String = "network", val host: String? = null, val port: Int? = null, val code: String? = null) : Screen()
     object Profiles : Screen()
     object Main : Screen()
     data class Details(val id: Long) : Screen()

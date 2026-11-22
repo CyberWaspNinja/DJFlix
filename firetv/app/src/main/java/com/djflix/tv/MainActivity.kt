@@ -1,5 +1,6 @@
 package com.djflix.tv
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         app = AppState(this)
         app.start()
+        handleLink(intent)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Accent, background = Bg, surface = Panel)) {
                 Box(Modifier.fillMaxSize().background(Bg)) {
@@ -38,7 +40,7 @@ class MainActivity : ComponentActivity() {
                     BackHandler(enabled = app.stack.size > 1 && screen !is Screen.Player) { app.back() }
                     key(app.stack.size, screen) {
                         when (screen) {
-                            is Screen.Setup -> SetupWizard(app, screen.startAt)
+                            is Screen.Setup -> SetupWizard(app, screen)
                             is Screen.Profiles -> ProfilesScreen(app)
                             is Screen.Main -> MainScreen(app)
                             is Screen.Details -> DetailsScreen(app, screen.id)
@@ -55,5 +57,17 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) { if (app.cfg.paired) app.flushPendingProgress() }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleLink(intent) }
+
+    /** djflix://connect?host=…&port=…[&code=…] opens the wizard at the connection test with the address filled in. */
+    private fun handleLink(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "djflix" || uri.host != "connect") return
+        val host = uri.getQueryParameter("host")?.takeIf { Regex("""^\d{1,3}(\.\d{1,3}){3}$""").matches(it) } ?: return
+        val port = uri.getQueryParameter("port")?.toIntOrNull()?.takeIf { it in 1024..65535 } ?: DEFAULT_PORT
+        val code = uri.getQueryParameter("code")?.takeIf { Regex("""^\d{6}$""").matches(it) }
+        app.reset(Screen.Setup("test", host, port, code))
     }
 }
