@@ -6,10 +6,19 @@ Personal media ecosystem: a Windows hub (service + desktop app) and a Fire TV cl
 
 | Component | State |
 |---|---|
-| `src/DJFlix.Server` — hub service, REST API v1, SQLite, pairing, sync, TMDB + Real-Debrid connectors, library scanner | Built and tested in CI on Windows and Linux (103 end-to-end checks, `tests/e2e.py`) |
-| Windows Service hosting and firewall rule | Compiles on Windows; not yet exercised (needs the installer) |
-| `firetv/` — Fire TV app (Kotlin, Compose, Media3): setup wizard, pairing, profiles, home, browse, search, details, player, settings | Built in CI; smoke-tested on an Android TV emulator (pairs, plays, reports progress). Not yet run on a physical Fire TV |
-| WinUI 3 desktop app, installer | Not started |
+| `src/DJFlix.Server` — hub service, REST API v1, SQLite, pairing, sync, TMDB + Real-Debrid connectors, library scanner | CI on Windows and Linux: 103 end-to-end checks (`tests/e2e.py`) against stand-in TMDB / Real-Debrid services |
+| `src/DJFlix.Desktop` — WinUI 3 app with LibVLC player, server dashboard, setup wizard, settings | CI builds it, drives it through profiles → home → movies → details → player → server → settings, and checks that playback progress reaches the hub (`tests/windows_smoke.ps1`) |
+| `installer/` — Inno Setup installer: app + Windows service + LAN-only firewall rules | CI installs silently, checks service, firewall rule, API restart and uninstall (`tests/installer_smoke.ps1`) |
+| `firetv/` — Fire TV app (Kotlin, Compose, Media3) | CI builds the APK and drives it on an Android TV emulator: pairs, browses, plays, reports progress (`tests/firetv_smoke.sh`) |
+
+Not yet verified: the real TMDB and Real-Debrid services, a physical Fire TV, and LAN discovery between two real devices.
+
+## Install on Windows
+
+Download `DJFlix-Setup.exe` from Releases ("DJFlix for Windows (latest build)") and run it. It installs the desktop app and the
+`DJFlix` Windows service (automatic start), and adds firewall rules limited to the local subnet on private networks.
+The installer is not code-signed, so Windows SmartScreen will ask for confirmation.
+Your data stays in `%ProgramData%\DJFlix` when you uninstall.
 
 ## Install the Fire TV app
 
@@ -18,7 +27,7 @@ Personal media ecosystem: a Windows hub (service + desktop app) and a Fire TV cl
 3. From a PC with adb: `adb connect <fire-tv-ip>:5555` then `adb install -r DJFlix-FireTV.apk`.
 
 Every build is signed with the same key (`firetv/sideload.keystore`), so new builds install over old ones.
-Screenshots from the latest emulator run are on the `ci-screenshots` branch.
+Screenshots from the latest CI runs are on the `ci-screenshots` (Fire TV) and `ci-screenshots-windows` branches.
 
 ## Run the hub
 
