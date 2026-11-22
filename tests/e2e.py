@@ -37,10 +37,13 @@ def touch(rel, size=2048, text=None):
 def start_hub():
     env = dict(os.environ, DJFLIX_DATA=DATA, DJFLIX_PORT=str(PORT), DJFLIX_TMDB_BASE=f"http://127.0.0.1:{UP}/3", DJFLIX_RD_BASE=f"http://127.0.0.1:{UP}/rd", DJFLIX_TMDB_IMAGE_BASE=f"http://127.0.0.1:{UP}/img")
     p = subprocess.Popen(["dotnet", DLL], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    wait_up(); return p
+    try: wait_up()
+    except SystemExit:
+        p.terminate(); print(p.communicate(timeout=10)[0].decode(errors="replace")[-4000:]); up.terminate(); raise
+    return p
 
 def wait_up():
-    for _ in range(100):
+    for _ in range(60):
         try:
             if call("GET", "/health")[0] == 200: return
         except Exception: pass
